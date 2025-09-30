@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "SlashCommand(/kiro:spec-requirements:*)",
+      "SlashCommand(/kiro:spec-design:*)",
+      "SlashCommand(/kiro:spec-tasks:*)",
+      "Bash(test:*)",
+      "Bash(python:*)",
+      "Bash(.venvScriptspip install:*)",
+      "Bash(./venv/Scripts/pip install:*)",
+      "Bash(./venv/Scripts/python -m pytest tests/test_logging_config.py -v)",
+      "Bash(./.venv/Scripts/python -m pytest tests/test_logging_config.py -v)",
+      "Bash(./.venv/Scripts/python -m pytest tests/ -v -q)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
