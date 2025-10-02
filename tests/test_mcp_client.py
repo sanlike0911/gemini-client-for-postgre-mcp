@@ -1,4 +1,4 @@
-"""MCP クライアントのテスト."""
+﻿"""MCP クライアントのテスト."""
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -7,59 +7,51 @@ from src.mcp_client import MCPClient, MCPConfig, MCPError
 
 
 @pytest.fixture
-def mcp_config():
-    """テスト用の MCP 設定."""
+def mcp_config() -> MCPConfig:
     return MCPConfig(
+        transport="stdio",
         server_command="python",
         server_args=["server.py"],
-        transport="stdio"
     )
 
 
 @pytest.fixture
-def mcp_client(mcp_config):
-    """テスト用の MCP クライアント."""
+def mcp_client(mcp_config) -> MCPClient:
     return MCPClient(config=mcp_config)
 
 
 def test_mcp_client_initialization(mcp_config):
-    """MCP クライアントが正しく初期化されること."""
     client = MCPClient(config=mcp_config)
 
     assert client is not None
     assert client.config == mcp_config
-    assert client.is_connected() is False  # 初期状態では未接続
+    assert client.is_connected() is False
 
 
 @pytest.mark.asyncio
-async def test_connect_success(mcp_client):
-    """MCP サーバーへの接続が成功すること."""
-    # stdio_client をモック
-    with patch("src.mcp_client.stdio_client") as mock_stdio:
-        # コンテキストマネージャーをモック
+async def test_connect_success_stdio(mcp_client):
+    with patch("src.mcp_client.stdio_client") as mock_stdio, \
+         patch("src.mcp_client.ClientSession") as mock_session_class:
+
         mock_read = AsyncMock()
         mock_write = AsyncMock()
         mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(mock_read, mock_write))
         mock_stdio.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        # ClientSession をモック
-        with patch("src.mcp_client.ClientSession") as mock_session_class:
-            mock_session = MagicMock()
-            mock_session.initialize = AsyncMock()
-            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session.__aexit__ = AsyncMock(return_value=None)
-            mock_session_class.return_value = mock_session
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session_class.return_value = mock_session
 
-            result = await mcp_client.connect()
+        result = await mcp_client.connect()
 
-            assert result is True
-            assert mcp_client.is_connected() is True
+        assert result is True
+        assert mcp_client.is_connected() is True
 
 
 @pytest.mark.asyncio
-async def test_connect_failure(mcp_client):
-    """MCP サーバーへの接続が失敗すること."""
-    # stdio_client で例外を発生させる
+async def test_connect_failure_stdio(mcp_client):
     with patch("src.mcp_client.stdio_client") as mock_stdio:
         mock_stdio.side_effect = ConnectionError("Failed to connect")
 
@@ -70,122 +62,282 @@ async def test_connect_failure(mcp_client):
 
 
 @pytest.mark.asyncio
-async def test_get_context_success(mcp_client):
-    """コンテキスト情報の取得が成功すること."""
-    # 接続状態をモック
-    with patch("src.mcp_client.stdio_client") as mock_stdio:
+async def test_connect_success_sse():
+    config = MCPConfig(
+        transport="sse",
+        sse_url="http://localhost:8000/sse",
+        sse_headers={"Authorization": "Bearer token"},
+        sse_timeout=10.0,
+        sse_read_timeout=20.0,
+    )
+    client = MCPClient(config=config)
+
+    with patch("src.mcp_client.sse_client") as mock_sse, \
+         patch("src.mcp_client.ClientSession") as mock_session_class:
+
         mock_read = AsyncMock()
         mock_write = AsyncMock()
-        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(mock_read, mock_write))
+        mock_sse.return_value.__aenter__ = AsyncMock(return_value=(mock_read, mock_write))
+        mock_sse.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session_class.return_value = mock_session
+
+        result = await client.connect()
+
+        assert result is True
+        assert client.is_connected() is True
+        mock_sse.assert_called_once_with(
+            url="http://localhost:8000/sse",
+            headers={"Authorization": "Bearer token"},
+            timeout=10.0,
+            sse_read_timeout=20.0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_connect_sse_missing_url():
+    config = MCPConfig(transport="sse")
+    client = MCPClient(config=config)
+
+    result = await client.connect()
+
+    assert result is False
+    assert client.is_connected() is False
+
+
+@pytest.mark.asyncio
+async def test_list_tools_caches_results(mcp_client):
+    with patch("src.mcp_client.stdio_client") as mock_stdio, \
+         patch("src.mcp_client.ClientSession") as mock_session_class:
+
+        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
         mock_stdio.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("src.mcp_client.ClientSession") as mock_session_class:
-            mock_session = MagicMock()
-            mock_session.initialize = AsyncMock()
-            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_tool = MagicMock()
+        mock_tool.name = "execute_sql"
+        mock_tool.description = "Execute SQL"
 
-            # list_resources をモック
-            mock_resource = MagicMock()
-            mock_resource.name = "test_resource"
-            mock_resource.uri = "file:///test"
-            mock_session.list_resources = AsyncMock(return_value=MagicMock(resources=[mock_resource]))
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.list_tools = AsyncMock(return_value=MagicMock(tools=[mock_tool]))
+        mock_session_class.return_value = mock_session
 
-            mock_session_class.return_value = mock_session
+        await mcp_client.connect()
 
-            await mcp_client.connect()
-            context = await mcp_client.get_context()
+        tools = await mcp_client.list_tools()
+        assert len(tools) == 1
+        mock_session.list_tools.assert_awaited_once()
 
-            assert context is not None
-            assert isinstance(context, str)
-            assert "test_resource" in context or "file:///test" in context
+        await mcp_client.list_tools()
+        mock_session.list_tools.assert_awaited_once()
+
+        await mcp_client.list_tools(force_refresh=True)
+        assert mock_session.list_tools.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_list_tools_failure_raises(mcp_client):
+    with patch("src.mcp_client.stdio_client") as mock_stdio, \
+         patch("src.mcp_client.ClientSession") as mock_session_class:
+
+        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
+        mock_stdio.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.list_tools = AsyncMock(side_effect=Exception("boom"))
+        mock_session_class.return_value = mock_session
+
+        await mcp_client.connect()
+
+        with pytest.raises(MCPError) as exc_info:
+            await mcp_client.list_tools(force_refresh=True)
+
+        assert exc_info.value.error_type == "protocol"
+
+
+@pytest.mark.asyncio
+async def test_call_tool_success(mcp_client):
+    with patch("src.mcp_client.stdio_client") as mock_stdio, \
+         patch("src.mcp_client.ClientSession") as mock_session_class:
+
+        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
+        mock_stdio.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        tool_result = MagicMock()
+        tool_result.isError = False
+
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.call_tool = AsyncMock(return_value=tool_result)
+        mock_session_class.return_value = mock_session
+
+        await mcp_client.connect()
+
+        result = await mcp_client.call_tool("execute_sql", {"sql": "SELECT 1"})
+
+        assert result is tool_result
+        mock_session.call_tool.assert_awaited_once_with(
+            name="execute_sql",
+            arguments={"sql": "SELECT 1"},
+            read_timeout_seconds=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_call_tool_failure_raises(mcp_client):
+    with patch("src.mcp_client.stdio_client") as mock_stdio, \
+         patch("src.mcp_client.ClientSession") as mock_session_class:
+
+        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
+        mock_stdio.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.call_tool = AsyncMock(side_effect=Exception("timeout"))
+        mock_session_class.return_value = mock_session
+
+        await mcp_client.connect()
+
+        with pytest.raises(MCPError) as exc_info:
+            await mcp_client.call_tool("execute_sql", {"sql": "SELECT 1"})
+
+        assert exc_info.value.error_type == "tool"
+
+
+def test_render_tool_result_handles_content():
+    from types import SimpleNamespace
+
+    result = MagicMock()
+    result.isError = False
+    result.structuredContent = {"rows": 1}
+    result.content = [
+        SimpleNamespace(text="id\tname\n1\tAlice"),
+        SimpleNamespace(data="metadata"),
+    ]
+
+    text = MCPClient.render_tool_result(result)
+
+    assert "rows" in text
+    assert "Alice" in text
+    assert "metadata" in text
+
+
+@pytest.mark.asyncio
+async def test_get_context_success(mcp_client):
+    with patch("src.mcp_client.stdio_client") as mock_stdio, \
+         patch("src.mcp_client.ClientSession") as mock_session_class:
+
+        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
+        mock_stdio.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        mock_resource = MagicMock()
+        mock_resource.name = "test_resource"
+        mock_resource.uri = "file:///test"
+
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.list_resources = AsyncMock(return_value=MagicMock(resources=[mock_resource]))
+        mock_session_class.return_value = mock_session
+
+        await mcp_client.connect()
+        context = await mcp_client.get_context()
+
+        assert context is not None
+        assert "test_resource" in context
 
 
 @pytest.mark.asyncio
 async def test_get_context_when_not_connected(mcp_client):
-    """未接続時にコンテキスト取得が None を返すこと."""
     context = await mcp_client.get_context()
-
     assert context is None
 
 
 @pytest.mark.asyncio
 async def test_get_context_failure(mcp_client):
-    """コンテキスト取得失敗時に MCPError が発生すること."""
-    # 接続状態をモック
-    with patch("src.mcp_client.stdio_client") as mock_stdio:
-        mock_read = AsyncMock()
-        mock_write = AsyncMock()
-        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(mock_read, mock_write))
+    with patch("src.mcp_client.stdio_client") as mock_stdio, \
+         patch("src.mcp_client.ClientSession") as mock_session_class:
+
+        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
         mock_stdio.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("src.mcp_client.ClientSession") as mock_session_class:
-            mock_session = MagicMock()
-            mock_session.initialize = AsyncMock()
-            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session.list_resources = AsyncMock(side_effect=Exception("Protocol error"))
+        mock_session_class.return_value = mock_session
 
-            # list_resources でエラーを発生させる
-            mock_session.list_resources = AsyncMock(side_effect=Exception("Protocol error"))
+        await mcp_client.connect()
 
-            mock_session_class.return_value = mock_session
+        with pytest.raises(MCPError) as exc_info:
+            await mcp_client.get_context()
 
-            await mcp_client.connect()
-
-            with pytest.raises(MCPError) as exc_info:
-                await mcp_client.get_context()
-
-            assert exc_info.value.error_type == "protocol"
+        assert exc_info.value.error_type == "protocol"
 
 
 @pytest.mark.asyncio
 async def test_disconnect(mcp_client):
-    """MCP サーバーから切断できること."""
-    # 接続状態をモック
-    with patch("src.mcp_client.stdio_client") as mock_stdio:
-        mock_read = AsyncMock()
-        mock_write = AsyncMock()
-        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(mock_read, mock_write))
+    with patch("src.mcp_client.stdio_client") as mock_stdio, \
+         patch("src.mcp_client.ClientSession") as mock_session_class:
+
+        mock_stdio.return_value.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
         mock_stdio.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("src.mcp_client.ClientSession") as mock_session_class:
-            mock_session = MagicMock()
-            mock_session.initialize = AsyncMock()
-            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session.__aexit__ = AsyncMock(return_value=None)
-            mock_session_class.return_value = mock_session
+        mock_session = MagicMock()
+        mock_session.initialize = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session_class.return_value = mock_session
 
-            await mcp_client.connect()
-            assert mcp_client.is_connected() is True
+        await mcp_client.connect()
+        await mcp_client.disconnect()
 
-            await mcp_client.disconnect()
-
-            assert mcp_client.is_connected() is False
+        assert mcp_client.is_connected() is False
 
 
 def test_is_connected_initially_false(mcp_client):
-    """初期状態で未接続であること."""
     assert mcp_client.is_connected() is False
 
 
 def test_mcp_config_dataclass():
-    """MCPConfig データクラスが正しく動作すること."""
     config = MCPConfig(
+        transport="sse",
         server_command="python",
         server_args=["server.py", "--port", "8080"],
-        transport="stdio"
+        sse_url="http://localhost:8000/sse",
+        sse_headers={"Authorization": "Bearer token"},
+        sse_timeout=10.0,
+        sse_read_timeout=15.0,
     )
 
+    assert config.transport == "sse"
     assert config.server_command == "python"
     assert config.server_args == ["server.py", "--port", "8080"]
-    assert config.transport == "stdio"
+    assert config.sse_url == "http://localhost:8000/sse"
+    assert config.sse_headers == {"Authorization": "Bearer token"}
+    assert config.sse_timeout == 10.0
+    assert config.sse_read_timeout == 15.0
 
 
 def test_mcp_error_dataclass():
-    """MCPError データクラスが正しく動作すること."""
     error = MCPError(
         error_type="connection",
-        message="接続に失敗しました"
+        message="接続に失敗しました",
     )
 
     assert error.error_type == "connection"

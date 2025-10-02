@@ -451,8 +451,19 @@ class GeminiError(Exception):
     original_error: Optional[Exception]
 
 class GeminiClient:
-    def __init__(self, api_key: str, model: str = "gemini-1.5-flash") -> None:
-        """Gemini クライアントを初期化する"""
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gemini-1.5-flash",
+        system_instruction: Optional[str] = None
+    ) -> None:
+        """Gemini クライアントを初期化する
+
+        Args:
+            api_key: Gemini API キー
+            model: 使用するモデル名
+            system_instruction: システムインストラクション（ロール定義）
+        """
         ...
 
     async def send_message(
@@ -847,6 +858,7 @@ class AppConfig:
     mcp_transport: str = "stdio"
     log_level: str = "INFO"
     gemini_model: str = "gemini-1.5-flash"
+    gemini_system_instruction: Optional[str] = None
 
     def has_mcp_config(self) -> bool:
         return self.mcp_server_command is not None
@@ -883,6 +895,7 @@ class AppConfig:
 # Gemini API Configuration
 GEMINI_API_KEY=your_api_key_here
 GEMINI_MODEL=gemini-1.5-flash
+GEMINI_SYSTEM_INSTRUCTION=あなたは丁寧で実用的なアシスタントです。回答は簡潔に説明してください。
 
 # MCP Server Configuration (Optional)
 MCP_SERVER_COMMAND=python

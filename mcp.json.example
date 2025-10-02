@@ -1,0 +1,23 @@
+{
+  "defaultServer": "postgres-remote",
+  "mcpServers": {
+    "postgres-local": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["server.py"],
+      "env": {
+        "PGHOST": "localhost",
+        "PGDATABASE": "postgres"
+      }
+    },
+    "postgres-remote": {
+      "transport": "sse",
+      "url": "http://localhost:8000/sse",
+      "headers": {
+        "Authorization": "Bearer your_api_token"
+      },
+      "timeout": 5,
+      "readTimeout": 300
+    }
+  }
+}

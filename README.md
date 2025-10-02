@@ -1,4 +1,4 @@
-# Gemini MCP Chat Application
+﻿# Gemini MCP Chat Application
 
 Gemini API と MCP (Model Context Protocol) サーバーを統合したシンプルなターミナルチャットアプリケーションです。
 
@@ -64,11 +64,32 @@ cp .env.example .env
 
 ### MCP サーバー設定（オプショナル）
 
-MCP サーバーを使用する場合:
+MCP サーバーとの接続設定は `mcp.json` で管理します。`mcp.json.example` をコピーして編集し、必要なサーバーを `mcpServers` キーに追加してください。
 
-- `MCP_SERVER_COMMAND`: MCP サーバー起動コマンド（例: `python`）
-- `MCP_SERVER_ARGS`: コマンドライン引数（カンマ区切り、例: `server.py,--port,8080`）
-- `MCP_TRANSPORT`: トランスポート方式（デフォルト: `stdio`）
+```json
+{
+  "defaultServer": "postgres-remote",
+  "mcpServers": {
+    "postgres-remote": {
+      "transport": "sse",
+      "url": "http://localhost:8000/sse",
+      "headers": { "Authorization": "Bearer your_api_token" }
+    },
+    "postgres-local": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["server.py"],
+      "env": { "PGHOST": "localhost" }
+    }
+  }
+}
+```
+
+- `transport` が `stdio` の場合はローカルでコマンドを起動します。
+- `transport` が `sse` の場合は HTTP(S) 経由でサーバーに接続します。
+- `defaultServer` を設定すると複数のサーバー定義から既定で利用するものを選択できます。
+
+`mcp.json` の場所を変更したい場合は `MCP_CONFIG_PATH` 環境変数でパスを指定できます。`MCP_SERVER` 環境変数を設定すると特定のサーバー定義を明示的に選べます。
 
 ## 使用方法
 
@@ -76,12 +97,6 @@ MCP サーバーを使用する場合:
 
 ```bash
 python -m src.main
-```
-
-または:
-
-```bash
-python src/main.py
 ```
 
 ### チャット操作
@@ -195,3 +210,6 @@ ModuleNotFoundError: No module named 'google.genai'
 ```bash
 pip install -r requirements.txt
 ```
+
+## MCP Tool Workflow
+When connected to an MCP server, the chat application now enumerates the available MCP tools and decides whether a tool call is required before answering. This allows integrations such as PostgreSQL MCP Pro to be used without hard-coding database logic inside the LLM.
